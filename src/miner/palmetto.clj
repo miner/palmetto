@@ -366,6 +366,27 @@
     (println (:miner.palmetto/first x) (:miner.palmetto/last x)
              (str "(" (:miner.palmetto/club x) "), gwd") (:miner.palmetto/gwd x))))
 
+(def all-keys
+  [:miner.palmetto/first :miner.palmetto/last :miner.palmetto/nick 
+   :miner.palmetto/gender   :miner.palmetto/age :miner.palmetto/skill
+   :miner.palmetto/club 
+   :miner.palmetto/fees :miner.palmetto/paid :miner.palmetto/tshirt
+   :miner.palmetto/pro-am  :miner.palmetto/lesson1 :miner.palmetto/clinic1
+   :miner.palmetto/clinic2 :miner.palmetto/gwd 
+   :miner.palmetto/mxd :miner.palmetto/md  :miner.palmetto/wd 
+   :miner.palmetto/addr :miner.palmetto/addr2
+   :miner.palmetto/city  :miner.palmetto/state
+   :miner.palmetto/phone ])
+
+(def vectorizer (apply juxt all-keys))
+
+(defn write-csv-file
+  ([] (write-csv-file "/tmp/players.csv"))
+  ([to]
+   (with-open [writer (io/writer to)]
+     (let [all (all-players)]
+       (csv/write-csv writer (conj (map vectorizer (all-players)) (map name all-keys)))))
+     to))
 
 ;; GWD = Gathering with Dinner
 ;; many non-players attended, look for non-players reports
