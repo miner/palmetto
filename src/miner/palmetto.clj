@@ -4,7 +4,8 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io])
   )
-            
+
+
 (def ^:dynamic *raw-dom* (html/html-resource (io/resource "confidential/palmetto-players.html")))
 (def ^:dynamic *rows* (html/select *raw-dom* [:html :body :table :tbody :tr]))
 
@@ -27,7 +28,11 @@
   (map #(zipmap *raw-keys* (map html/text (html/select % [:td]))) *rows*))
 
 
-
+(defn age-bracket [age]
+  (cond (< age 50) 19
+        (< age 60) 50
+        (< age 70) 60
+        (>= age 70) 70))
 
 
 ;; Crazy formatting
@@ -211,6 +216,70 @@
    "shelby" "Shelby"
    })
 
+;; SEM FIXME -- need to rework canonicalizer to use Lisa's list.  Maybe by Levenstein sp???
+;; Cheap way is to compare by name between original values and Lisa's corrections.
+
+(def lisa-standard-clubs
+  #{"Del Webb Jacksonville FL"
+   "Tellico Village Pickleball Club TN"
+   "Brevard NC"
+   "Palmetto PB Club Columbia SC"
+   "Aiken Pickledillys SC"
+   "Savannah Lakes Village SC"
+   "Augusta Paddle Up Sports GA"
+   "Rawls Creek Paddler Irmo SC"
+   "Keowee Key PB Club SC"
+   "Lancaster SC"
+   "New Bern Pickleball Club NC"
+   "Cane Bay Pickleball Club SC"
+   "Clover SC"
+   "Lawrenceville GA"
+   "WNC Pickleball Club NC"
+   "Aiken/Columbia SC"
+   "Sun City Hilton Head SC"
+   "Shelby NC"
+   "Atlanta Pickleball GA"
+   "Death Valley PB Gang Clemson SC"
+   "Aiken Green Boundary SC"
+   "Hilton Head Island Rec Center SC"
+   "Upstate Pickleball SC"
+   "Lake Greenwood SC"
+   "Havelock NC"
+   "Sun City Peachtree GA"
+   "Myrtle Beach Pickleballers SC"
+   "Charleston SC"
+   "Augusta GA"
+   "The Reserve"
+   "Aiken SC"
+   "Evans GA"
+   "Naples FL"
+   "Candler NC"
+   "Asheville NC"
+   "Augusta Wilson Family Y GA"
+   "Hanahan SC"
+   "Sun City Carolina Lakes SC"
+   "Aiken/Augusta Wilson Y GA"
+   "Greenback TN"
+   "Camden Pickleball SC"
+   "Lake Wylie SC"
+   "North Myrtle Beach PB SC"
+   "North Augusta SC"
+   "Concord NC"
+   "Crosswalk NC"
+   "Charlotte NC"
+   "Rabun County Pickleball GA"
+   "Cayce SC"
+   "Columbia SC"
+   "Columbia LA"
+   "Lawndale NC"
+   "Pee Dee Picklers Florence SC"
+   "Ponte Vedra Beach FL"
+   "Connestee FM Picklers NC"
+   "Woodside Plantation"
+   "Grover NC"
+   "Athens Area Pickleball Assoc GA"
+   "Hephzibah GA"
+   "The Landings Club Savannah GA"})
 
 
 ;; SEM FIXME: need to canonicalize clubs
@@ -393,4 +462,118 @@
 
 ;; also pro-am got non-players
 ;; probably volunteers are also in system
+
+(defn to-long [s] (if (str/blank? s) 0 (Long/parseLong ^String s)))
+
+(defn to-double [s] (Double/parseDouble ^String s))
+
+(defn to-bool [s] (case s
+                    ("true" "True" "TRUE" "Y" "y") true
+                    false))
+
+(defn to-gender [s] (case s
+                      "M" :male
+                      "F" :female))
+
+;; in csv order
+(def lisa-keys
+  [:miner.palmetto/first
+   :miner.palmetto/last
+   :miner.palmetto/nick
+   :miner.palmetto/gender
+   :miner.palmetto/age
+   :miner.palmetto/skill
+   :miner.palmetto/club
+   :miner.palmetto/fees
+   :miner.palmetto/paid
+   :miner.palmetto/tshirt
+   :miner.palmetto/pro-am
+   :miner.palmetto/lesson1
+   :miner.palmetto/clinic1
+   :miner.palmetto/clinic2
+   :miner.palmetto/gwd
+   :miner.palmetto/mxd
+   :miner.palmetto/md
+   :miner.palmetto/wd
+   :miner.palmetto/addr
+   :miner.palmetto/addr2
+   :miner.palmetto/city
+   :miner.palmetto/state
+   :miner.palmetto/phone
+   :miner.palmetto/region])
+
+(def lisa-converter
+  [:miner.palmetto/first identity
+   :miner.palmetto/last identity
+   :miner.palmetto/nick identity 
+   :miner.palmetto/gender to-gender
+   :miner.palmetto/age to-long
+   :miner.palmetto/skill to-double
+   :miner.palmetto/club identity
+   :miner.palmetto/fees to-long
+   :miner.palmetto/paid to-long
+   :miner.palmetto/tshirt identity
+   :miner.palmetto/pro-am to-bool
+   :miner.palmetto/lesson1 to-bool
+   :miner.palmetto/clinic1 to-bool
+   :miner.palmetto/clinic2 to-bool
+   :miner.palmetto/gwd to-long
+   :miner.palmetto/mxd identity
+   :miner.palmetto/md identity
+   :miner.palmetto/wd identity
+   :miner.palmetto/addr identity
+   :miner.palmetto/addr2 identity
+   :miner.palmetto/city identity
+   :miner.palmetto/state identity
+   :miner.palmetto/phone identity
+   :miner.palmetto/region identity])
+
+(defn clean-up-lisa-row [vdata]
+  (reduce conj {} (map (fn [k f v]
+                         (let [res (f v)]
+                           (when-not (contains? #{false nil ""} res)
+                             [k res])))
+                       (take-nth 2 lisa-converter)
+                       (take-nth 2 (rest lisa-converter))
+                       vdata)))
+
+(defn read-csv-file
+  ([] (read-csv-file "confidential/Lisa-revised.csv"))
+  ([from]
+   (with-open [reader (io/reader (io/resource from))]
+     (let [rows (csv/read-csv reader)
+           data-keys (map #(keyword "miner.palmetto" (str/lower-case %)) (first rows))
+           data-rows (doall (rest rows))]
+       (assert (= data-keys (take-nth 2 lisa-converter)))
+       (map clean-up-lisa-row data-rows)))))
+
+(defn lisa-players []
+  (read-csv-file))
+
+;; BAD
+#_ (defn XXXreport-by-region-age-brackets []
+  (into (sorted-map) (map (fn [[club peeps]]
+                            [club ((juxt #(get % 19 0) #(get % 50 0) #(get % 60 0)
+                                         #(get % 70 0))
+                                   (frequencies (map #(age-bracket (::age %))
+                                                     peeps)))])
+                          (group-by ::club (lisa-players)))))
+
+
+(defn report-by-region-age-brackets []
+  (conj
+   (sort (map (fn [[club peeps]]
+                (into [club] ((juxt #(get % 19 0) #(get % 50 0) #(get % 60 0) #(get % 70 0))
+                              (frequencies (map #(age-bracket (::age %)) peeps)))))
+              (group-by ::region (lisa-players))))
+   ["Region" "19+" "50+" "60+" "70+"]))
+
+
+(defn write-report-rab
+  ([] (write-report-rab "/tmp/region-age-brackets.csv"))
+  ([to]
+   (with-open [writer (io/writer to)]
+     (let [all (report-by-region-age-brackets)]
+       (csv/write-csv writer all)))
+   to))
 
